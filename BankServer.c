@@ -107,11 +107,76 @@ void serviceClient(int sock){
 	printf("Client %d disconnected\n", sock);
 }
 int login(int sock){
-	//to be implemented
+	int type, accNo, fd, valid=1, invalid=0, login_success=0;
+	char password[15];
+	struct account temp;
+	read(sock, &type, sizeof(type));
+	if(type == 3) {return 0;}
+	read(sock, &accNo, sizeof(accNo));
+	read(sock, &password, sizeof(password));	
+	
+	if((fd = open(ACC[type-1], O_RDWR))==-1)printf("File Error\n");
+	
+	lseek(fd, (accNo - 202001)*sizeof(struct account), SEEK_CUR);
+	struct flock lock;
+
+	lock.l_start = (accNo-1)*sizeof(struct account);
+	lock.l_len = sizeof(struct account);
+	lock.l_whence = SEEK_SET;
+	lock.l_pid = getpid();
+	printf("type in server->%d",type);
+	
+	if(type == 1){
+		lock.l_type = F_WRLCK;
+		fcntl(fd,F_SETLKW, &lock);
+		read(fd, &temp, sizeof(struct account));
+		printf("p1->%s\tacc->%d",temp.password,temp.accountNumber);
+				
+		if(temp.accountNumber == accNo){
+			if(!strcmp(temp.password, password)){
+				printf("p1->%s\tp2->%s",temp.password, password);
+				write(sock, &valid, sizeof(valid));
+				//Window after login
+				login_success = 1;
+			}
+		}
+		lock.l_type = F_UNLCK;
+		fcntl(fd, F_SETLK, &lock);
+		close(fd);
+		if(login_success)
+		return 3;
+	}
+	else if(type == 2){
+		lock.l_type = F_RDLCK;
+		fcntl(fd,F_SETLKW, &lock);
+		read(fd, &temp, sizeof(struct account));
+		lock.l_type = F_UNLCK;
+		fcntl(fd, F_SETLK, &lock);
+		close(fd);
+		lock.l_type = F_WRLCK;
+		fcntl(fd,F_SETLKW, &lock);
+		if(temp.accountNumber == accNo){
+			if(!strcmp(temp.password, password)){
+				printf("p1->%s\tp2->%s",temp.password, password);
+				
+				write(sock, &valid, sizeof(valid));
+				//Window after login
+				login_success =1;
+				return 3;
+			}
+		}
+		lock.l_type = F_UNLCK;
+		fcntl(fd, F_SETLK, &lock);
+		close(fd);
+		if(login_success)
+		return 3;
+	}
+		
+		write(sock, &invalid, sizeof(invalid));	
+	return 3;	
 } 
 int newAccount(int sock){
 	int type,fd;
-//	char *name=malloc(20);;
 	char password[15];
 	char customer1[20];
 	char customer2[20];
@@ -129,12 +194,7 @@ int newAccount(int sock){
 
 
 	int fp = lseek(fd, 0, SEEK_END);
-/*int type; //0 if individual,1 if joint;
-	int accountNumber;
-	struct customer c1;
-	struct customer c2; 
-	char *password;
-	long balance; */
+
 	if(fp==0){
 		temp.accountNumber = 202001;
 	}

@@ -54,9 +54,9 @@ int view(){
         if(fd==-1){printf("error in opening");}
         fp = lseek(fd,0,SEEK_SET);
         struct account acc;
-        printf("Name\tAccount number\tBalance\tPassword\n");
+        printf("Name\t\tAccount number\t\tBalance\t\tPassword\n");
         while(read(fd,&acc,sizeof(acc)))
-            printf("%s\t\t%d\t%ld\t%s\n",acc.customer1,acc.accountNumber,acc.balance,acc.password);
+            printf("%s\t\t%d\t\t%ld\t\t%s\n",acc.customer1,acc.accountNumber,acc.balance,acc.password);
         getchar();
         close(fd);
         break;
@@ -66,9 +66,9 @@ int view(){
         fd = open(ACC[1],O_RDONLY);
         fp = lseek(fd,0,SEEK_SET);
         struct account acc;
-        printf("Name1\tName2\tAccount number\tBalance\tPassword\n");
+        printf("Name1\t\tName2\t\tAccount number\t\tBalance\t\tPassword\n");
         while(read(fd,&acc,sizeof(acc))){
-        	printf("%s\t\t%s\t\t%d\t%ld\t%s\n",acc.customer1,acc.customer1,acc.accountNumber,acc.balance,acc.password);
+        	printf("%s\t\t%s\t\t%d\t\t%ld\t\t%s\n",acc.customer1,acc.customer2,acc.accountNumber,acc.balance,acc.password);
 }
 				getchar();       
 				close(fd);

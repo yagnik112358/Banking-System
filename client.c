@@ -22,7 +22,7 @@ int banking(int sock);
 void createIndividualAccount(int sock);
 void createJointAccount(int sock);
 void accountCreation(int sock);
-
+void login(int sock);
 int main(int argc,char *argv[]){
 	//char *nam="harshmamma";
 	//char *dat="12/02/1998";
@@ -74,6 +74,7 @@ int banking(int sock){
   printf("2)New account\n");
   printf("3)Exit\n");						
   int option;
+  printf("-----------------Enter Your Choice-----------------\n");		
   scanf("%d",&option);  
   while(option > 3 || option < 1)
 	{
@@ -84,13 +85,13 @@ int banking(int sock){
 	write(sock,&option,sizeof(int));
   switch(option){
   case 1:
-  	printf("login\n");
+  	login(sock);//printf("login\n");
   	break;
   case 2:
   	accountCreation(sock);//printf("reg\n");
   	break;
   case 3:{
-  	printf("Exit from banking");
+  	printf("Thankyou for banking with us\n");
   	break;}
   }
   return option;
@@ -180,7 +181,46 @@ void createJointAccount(int sock){
 	displayAccountDetails(acc);
 	return acc;*/
 }
-
+void login(int sock){
+	int type,accNo;
+	char password[15];
+	int validLogin;
+	printf("Select type of account:\n");
+	printf("1)Individual\n");			
+  printf("2)Joint Account\n");
+  printf("3)Exit\n");									
+  scanf("%d",&type);
+  while(type > 3 || type < 1) {
+			printf("Invalid Choice!\n");
+			printf("Enter Your Choice : ");
+			scanf("%d", &type);
+		}
+		
+		write(sock, &type, sizeof(type));
+					
+		if(type ==1 || type ==2){
+				printf("Enter Your Account Number: ");
+				scanf("%d", &accNo);
+				strcpy(password,getpass("Enter password: "));
+				write(sock, &accNo, sizeof(accNo));
+				write(sock, &password, strlen(password));
+		}					
+		
+		read(sock, &validLogin, sizeof(validLogin));
+		printf("You are a valid or not -> %d\n",validLogin);
+		if(validLogin == 1){
+			//Login window
+			printf("You are a valid client");
+			getchar();
+			system("clear");
+		}
+		else{
+			printf("Login Failed\n");
+			while(getchar()!='\n');
+			getchar();
+			
+		}
+}
 /*void withdraw(struct account *acc,int amount){
 	if((*acc).balance>=amount){
 		if(amount<50000){
