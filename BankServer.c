@@ -1,41 +1,30 @@
 #include<stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
-#include<sys/socket.h>
-#include<unistd.h>
-#include<stdbool.h>
-#include<string.h>
-#include<fcntl.h>
-#include<arpa/inet.h>
-#include<netinet/in.h>
-#include<stdlib.h>
+#include <sys/socket.h>
+#include <arpa/inet.h> 
+#include <unistd.h>
+#include <ifaddrs.h>
+#include <netdb.h>
+#include <string.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include "structures.h"
 
 #define PORT 8759
 #define ERR_EXIT(msg) do{perror(msg);exit(EXIT_FAILURE);}while(0)
 
-/*struct customer{
-	char *name;
-	char *dob;
-};*/
-
-struct account{
-	int type; //0 if individual,1 if joint;
-	int accountNumber;
-	char customer1[20];
-	char customer2[20]; 
-	char password[15];
-	long balance; 
-};
-void displayAccountDetails(struct account acc);
 int login(int sock);
 
 int newAccount(int sock);
+int adminOperation(int sock);
 
 void serviceClient(int sock);
-
+int performClientOperation(int sock,int accNo,int type);
 char *ACC[2] = {"./database/accounts/individual", "./database/accounts/joint"};
+char *CUS[2] = {"./database/customers", "./database/customers"};
 
-int main()
-{
+int main(){
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if(sockfd==-1) {
 		//if socket creation fails
@@ -84,19 +73,26 @@ int main()
 	}
 	close(sockfd);
 	printf("Connection closed!\n");
+	return 0;
 }
 void serviceClient(int sock){
 	int func_id;
+	int option;
 	printf("Client %d connected\n", sock);
 	while(1){
 		printf("Reading option\n");
-		read(sock, &func_id, sizeof(int));
-		printf("Read %d\n",func_id);
-		if(func_id==1) {
-			login(sock);
+		read(sock, &option, sizeof(int));
+		printf("Read %d\n",option);
+		if(option==3) {
+			//admin menu
+			while(adminOperation(sock)!=4);
 		}
-		else if(func_id==2) {
-			newAccount(sock);
+		else if(option==2 || option==1) {
+			read(sock, &func_id, sizeof(func_id));
+			if(func_id==1)
+				login(sock);
+			if(func_id==2) 
+				newAccount(sock);
 		}
 		else { 
 			printf("Other choice!\n"); 
@@ -105,6 +101,41 @@ void serviceClient(int sock){
 	}
 	close(sock);
 	printf("Client %d disconnected\n", sock);
+}
+int adminOperation(int sock){
+	
+	int type,option, accNo, fd,fp,success=0;
+	struct account temp;
+	
+		read(sock,&option,sizeof(int));	
+		
+		if(option ==1){
+			read(sock, &type, sizeof(type));	
+			read(sock, &accNo, sizeof(accNo));
+			while(performClientOperation(sock,accNo,type)!=5);
+		}
+		if(option ==2){
+			newAccount(sock);
+		}
+		if(option ==3){
+		
+			read(sock, &type, sizeof(type));	
+			read(sock, &accNo, sizeof(accNo));
+
+			if((fd = open(ACC[type-1], O_RDWR))==-1)printf("File Error\n");
+			
+			lseek(fd, (accNo - 202001)*sizeof(struct account), SEEK_CUR);
+
+			//fp = lseek(fd, -1 * sizeof(struct account), SEEK_CUR);
+				temp.type=0;
+				temp.accountNumber=0;
+				strcpy(temp.password,"-");
+				temp.balance=0;
+				write(fd, &temp, sizeof(temp));
+				success =1;
+				write(sock, &success, sizeof(success));
+		}
+		return option;
 }
 int login(int sock){
 	int type, accNo, fd, valid=1, invalid=0, login_success=0;
@@ -115,28 +146,31 @@ int login(int sock){
 	read(sock, &accNo, sizeof(accNo));
 	read(sock, &password, sizeof(password));	
 	
+	//printf("accno read from client  = %d password = %s",accNo,password);
+	
 	if((fd = open(ACC[type-1], O_RDWR))==-1)printf("File Error\n");
 	
 	lseek(fd, (accNo - 202001)*sizeof(struct account), SEEK_CUR);
 	struct flock lock;
 
-	lock.l_start = (accNo-1)*sizeof(struct account);
+	lock.l_start = (accNo-202001)*sizeof(struct account);
 	lock.l_len = sizeof(struct account);
 	lock.l_whence = SEEK_SET;
 	lock.l_pid = getpid();
-	printf("type in server->%d",type);
+	//printf("type in server->%d",type);
 	
-	if(type == 1){
+	//if(type == 1){
+	//	printf("inside type 1");
 		lock.l_type = F_WRLCK;
 		fcntl(fd,F_SETLKW, &lock);
 		read(fd, &temp, sizeof(struct account));
-		printf("p1->%s\tacc->%d",temp.password,temp.accountNumber);
-				
+		//printf("pas1->%s\tacc->%d passcli = %s , strcpy =%d",temp.password,temp.accountNumber,password,strcmp(temp.password, password));
 		if(temp.accountNumber == accNo){
 			if(!strcmp(temp.password, password)){
-				printf("p1->%s\tp2->%s",temp.password, password);
+				//printf("p1->%s\tp2->%s",temp.password, password);
 				write(sock, &valid, sizeof(valid));
 				//Window after login
+				 while(performClientOperation(sock,accNo,type)!=6);
 				login_success = 1;
 			}
 		}
@@ -144,9 +178,11 @@ int login(int sock){
 		fcntl(fd, F_SETLK, &lock);
 		close(fd);
 		if(login_success)
-		return 3;
-	}
-	else if(type == 2){
+			return 3;
+	//}
+	/*else if(type == 2){
+	
+		//printf("inside type 1");
 		lock.l_type = F_RDLCK;
 		fcntl(fd,F_SETLKW, &lock);
 		read(fd, &temp, sizeof(struct account));
@@ -157,7 +193,7 @@ int login(int sock){
 		fcntl(fd,F_SETLKW, &lock);
 		if(temp.accountNumber == accNo){
 			if(!strcmp(temp.password, password)){
-				printf("p1->%s\tp2->%s",temp.password, password);
+				//printf("p1->%s\tp2->%s",temp.password, password);
 				
 				write(sock, &valid, sizeof(valid));
 				//Window after login
@@ -171,69 +207,204 @@ int login(int sock){
 		if(login_success)
 		return 3;
 	}
+	*/
 		
-		write(sock, &invalid, sizeof(invalid));	
+	write(sock, &invalid, sizeof(invalid));	
 	return 3;	
 } 
 int newAccount(int sock){
-	int type,fd;
+	int type,fd,fd2;
 	char password[15];
-	char customer1[20];
-	char customer2[20];
+	char name[20];
+	char name2[20];
 	struct account temp;
+	struct customer c,c1;
 	read(sock, &type, sizeof(type));	//1)Individual 2)Joint 3)Back
 	if(type == 3){ return 0;}	//when back is choosen
-	read(sock, &customer1, sizeof(customer1));
-	read(sock, &customer2, sizeof(customer2));
-	read(sock, &password, sizeof(password));
-
-	if((fd = open(ACC[type], O_RDWR))==-1){
-		printf("File Error\n");
-		ERR_EXIT("open()");
+	if(type == 1){ 
+				read(sock, &name, sizeof(name));
+				read(sock, &password, sizeof(password));
+				if((fd = open(ACC[type-1], O_RDWR))==-1){
+					printf("File Error\n");
+					ERR_EXIT("open()");
+				}
+				if((fd2 = open(CUS[type-1], O_RDWR))==-1){
+					printf("File Error\n");
+					ERR_EXIT("open()");
+				}
+				int fp = lseek(fd, 0, SEEK_END);
+				
+				if(fp==0){
+					temp.accountNumber = 202001;
+				}
+				else{
+					fp = lseek(fd, -1 * sizeof(struct account), SEEK_CUR);
+					read(fd, &temp, sizeof(temp));
+					temp.accountNumber++;
+				}
+				int fp1 = lseek(fd2, 0, SEEK_END);
+				
+				if(fp1==0){
+					c.id = 1;
+				}
+				else{
+					fp1 = lseek(fd2, -1 * sizeof(struct customer), SEEK_CUR);
+					read(fd2, &c, sizeof(c));
+					c.id++;
+				}
+				c.accountNumber = temp.accountNumber;
+				strcpy(c.name,name); 
+				write(fd2, &c, sizeof(c));
+				strcpy(temp.password, password);
+				temp.balance=0;
+				temp.type=type;
+				write(fd, &temp, sizeof(temp));
+				//printf("Writing acc number %d\n",temp.accountNumber);
+				write(sock, &temp.accountNumber, sizeof(temp.accountNumber));
+				write(sock, &c.id, sizeof(c.id));
+				close(fd);
+				close(fd2);	
 	}
-
-
-	int fp = lseek(fd, 0, SEEK_END);
-
-	if(fp==0){
-		temp.accountNumber = 202001;
+	if(type == 2){ 
+				read(sock, &name, sizeof(name));
+				read(sock, &name2, sizeof(name2));
+				read(sock, &password, sizeof(password));
+				if((fd = open(ACC[type-1], O_RDWR))==-1){
+					printf("File Error\n");
+					ERR_EXIT("open()");
+				}
+				if((fd2 = open(CUS[type-1], O_RDWR))==-1){
+					printf("File Error\n");
+					ERR_EXIT("open()");
+				}
+				int fp = lseek(fd, 0, SEEK_END);
+				
+				if(fp==0){
+					temp.accountNumber = 202001;
+				}
+				else{
+					fp = lseek(fd, -1 * sizeof(struct account), SEEK_CUR);
+					read(fd, &temp, sizeof(temp));
+					temp.accountNumber++;
+				}
+				int fp1 = lseek(fd2, 0, SEEK_END);
+				
+				if(fp1==0){
+					c.id = 1;
+				}
+				else{
+					fp1 = lseek(fd2, -1 * sizeof(struct customer), SEEK_CUR);
+					read(fd2, &c, sizeof(c));
+					c.id++;
+				}
+				c.accountNumber = temp.accountNumber;
+				strcpy(c.name,name); 
+				write(fd2, &c, sizeof(c));
+				//fp1 = lseek(fd2, 0, SEEK_END);
+				
+				fp1 = lseek(fd2, -1 * sizeof(struct customer), SEEK_CUR);
+					read(fd2, &c1, sizeof(c1));
+					c1.id++;
+				c1.accountNumber = temp.accountNumber;
+				strcpy(c1.name,name2); 
+				write(fd2, &c1, sizeof(c1));
+				
+				strcpy(temp.password, password);
+				temp.balance=0;
+				temp.type=type;
+				write(fd, &temp, sizeof(temp));
+				printf("Writing acc number %d\n",temp.accountNumber);
+				write(sock, &temp.accountNumber, sizeof(temp.accountNumber));
+				write(sock, &c.id, sizeof(c.id));
+				write(sock, &c1.id, sizeof(c1.id));
+				close(fd);
+				close(fd2);	
 	}
-	else{
-		fp = lseek(fd, -1 * sizeof(struct account), SEEK_CUR);
-		read(fd, &temp, sizeof(temp));
-		temp.accountNumber++;
-	}
-	strcpy(temp.customer1, customer1);
-	strcpy(temp.customer2, customer2);
-	strcpy(temp.password, password);
-	temp.balance=0;
-	temp.type=type;
-	write(fd, &temp, sizeof(temp));
-	printf("Writing acc number %d\n",temp.accountNumber);
-	write(sock, &temp.accountNumber, sizeof(temp.accountNumber));
-	close(fd);
+		
 	return 3;
 }
 void displayAccountDetails(struct account acc){
-	if((acc).type==0) {
+	if((acc).type==1) {
 		printf("Individual account\n");
-		printf("Name : %s\n",((acc).customer1));
+		//printf("Name : %s\n",((acc).customer1));
 //		printf("Date of birth : %s\n",(acc).c1);
 		printf("accountNumber : %d\n",(acc).accountNumber);
 		printf("Password : %s\n",(acc).password);
 		printf("Balance : %ld\n",(acc).balance);
 	}
-	else if((acc).type==1){
+	else if((acc).type==2){
 		printf("Joint account	\n");
-		printf("Name:%s\n",((acc).customer1));
+		//printf("Name:%s\n",((acc).customer1));
 		printf("accountNumber : %d\n",(acc).accountNumber);
 		//printf("Date of birth :%s\n",((acc).c1).dob);
-		printf("Name:%s\n",((acc).customer2));
+		//printf("Name:%s\n",((acc).customer2));
 		//printf("Date of birth :%s\n",((acc).c2).dob);
 		printf("Password : %s\n",(acc).password);
 		printf("Balance : %ld\n",(acc).balance); 
 	}
 }
-/*void cpy(struct customer c1,struct customer c2){
+int performClientOperation(int sock,int accNo,int type){
+	int fd,fp;
+	struct account temp;
+	int option;
+	int amount,valid,balance;
+	char Password[15];
+	struct account acc;
+  
+		printf("Reading option in client operation\n");
+		read(sock, &option, sizeof(int));
+		printf("Read %d\n",option);
+		
 	
-}*/
+	if((fd = open(ACC[type-1], O_RDWR))==-1)printf("File Error\n");
+	
+	lseek(fd, (accNo - 202001)*sizeof(struct account), SEEK_CUR);
+	
+	//fp = lseek(fd, -1 * sizeof(struct account), SEEK_CUR);
+	read(fd, &temp, sizeof(temp));
+	printf("temp password->%s\ttemp acc->%d ",temp.password,temp.accountNumber);
+	 switch(option){
+  case 1:{
+					read(sock, &amount, sizeof(amount));
+		 		  temp.balance+=amount;//printf("%d Deposited to account number%d\n",amount,accNo);							
+  				//break;
+  				fp = lseek(fd, -1 * sizeof(struct account), SEEK_CUR);
+  				write(fd, &temp, sizeof(temp));
+					break;
+  			}
+  case 2:{
+					read(sock, &amount, sizeof(amount));
+			 	  if(temp.balance>=amount){
+			 	   temp.balance-=amount;
+			 	   valid =1;
+			 	  }
+			 	  else
+			 	  	valid=0;
+  				fp = lseek(fd, -1 * sizeof(struct account), SEEK_CUR);
+  				write(fd, &temp, sizeof(temp));
+			 	  
+			 	  write(sock, &valid, sizeof(valid));	
+					break;
+  	}
+  case 3:{
+  				balance = temp.balance;
+  				
+  				write(sock, &balance, sizeof(balance));  				
+  				break;
+  			}
+  case 4:{
+  				read(sock, &Password, sizeof(Password));
+  				strcpy(temp.password,Password);
+  				fp = lseek(fd, -1 * sizeof(struct account), SEEK_CUR);
+  				write(fd, &temp, sizeof(temp));  			
+  			//	printf("Password change for account number successful!\n");
+  				break;
+  			}
+  case 5:{
+ 					acc = temp;			 	
+  				write(sock, &acc, sizeof(acc));
+  				break;
+  			}
+  }
+  return option;
+}

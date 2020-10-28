@@ -9,22 +9,14 @@
 #include <string.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include "structures.h"
 
-
-#define PORT 8759
-#define ERR_EXIT(msg) do{perror(msg);exit(EXIT_FAILURE);}while(0)
-struct account{
-	int type; //0 if individual,1 if joint;
-	int accountNumber;
-	char customer1[20];
-	char customer2[20]; 
-	char password[15];
-	long balance; 
-};
 char *ACC[2] = {"./database/accounts/individual", "./database/accounts/joint"};
+char *CUS[2] = {"./database/customers", "./database/customers"};
 int view();
+
 int main(){
-	while(view()!=3);//code to view all data
+	while(view()!=4);//code to view all data
 	return 0;
 }
 int view(){
@@ -34,12 +26,13 @@ int view(){
 	printf("--------------- View ---------------\n");
 	printf("1) Individual accounts\n");
 	printf("2) Joint accounts\n");
-	printf("3) Exit\n");
+	printf("3) Customers\n");
+	printf("4) Exit\n");
 	printf("Enter Your Choice :\n");
 	scanf("%d", &option);
     printf("--------------------------------------------------\n");
     printf("--------------------------------------------------\n");
-    while(option > 3 || option < 1){
+    while(option > 4 || option < 1){
   		printf("Enter valid Choice :\n");
 			scanf("%d", &option);
     }
@@ -54,9 +47,9 @@ int view(){
         if(fd==-1){printf("error in opening");}
         fp = lseek(fd,0,SEEK_SET);
         struct account acc;
-        printf("Name\t\tAccount number\t\tBalance\t\tPassword\n");
+        printf("Account number\tBalance\tPassword\n");
         while(read(fd,&acc,sizeof(acc)))
-            printf("%s\t\t%d\t\t%ld\t\t%s\n",acc.customer1,acc.accountNumber,acc.balance,acc.password);
+            printf("%d\t\t%ld\t\t%s\n",acc.accountNumber,acc.balance,acc.password);
         getchar();
         close(fd);
         break;
@@ -66,15 +59,24 @@ int view(){
         fd = open(ACC[1],O_RDONLY);
         fp = lseek(fd,0,SEEK_SET);
         struct account acc;
-        printf("Name1\t\tName2\t\tAccount number\t\tBalance\t\tPassword\n");
+        printf("Account number\tBalance\tPassword\n");
         while(read(fd,&acc,sizeof(acc))){
-        	printf("%s\t\t%s\t\t%d\t\t%ld\t\t%s\n",acc.customer1,acc.customer2,acc.accountNumber,acc.balance,acc.password);
-}
+        	printf("%d\t\t%ld\t\t%s\n",acc.accountNumber,acc.balance,acc.password);
+        	}
 				getchar();       
 				close(fd);
         break;}
-    case 3:
-    	break;
+    case 3:{
+        fd = open(CUS[1],O_RDONLY);
+        fp = lseek(fd,0,SEEK_SET);
+        struct customer c;
+        printf("Account number\tCustomer_ID\tName\n");
+        while(read(fd,&c,sizeof(c))){
+        	printf("%d\t\t%d\t\t%s\n",c.accountNumber,c.id,c.name);
+        	}
+				getchar();       
+				close(fd);
+        break;}
 	}
 	getchar();
 	return option;
